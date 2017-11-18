@@ -8,6 +8,10 @@
 
 if(!defined('DOKU_INC')) die('meh.');
 if(!defined('NL')) define('NL',"\n");
+if (!defined('SEC_EDIT_PATTERN')) {
+    define('SEC_EDIT_PATTERN', '#<!-- EDIT(?<secid>\d+) (?<target>[A-Z_]+) (?:"(?<name>[^"]*)" )?(?:"(?<hid>[^"]*)" )?\[(?<range>\d+-\d*)\] -->#');
+}
+
 
 /**
  * Convenience function to quickly build a wikilink
@@ -91,13 +95,11 @@ function html_denied() {
 function html_secedit($text,$show=true){
     global $INFO;
 
-    $regexp = '#<!-- EDIT(\d+) ([A-Z_]+) (?:"([^"]*)" )?\[(\d+-\d*)\] -->#';
-
     if(!$INFO['writable'] || !$show || $INFO['rev']){
-        return preg_replace($regexp,'',$text);
+        return preg_replace(SEC_EDIT_PATTERN,'',$text);
     }
 
-    return preg_replace_callback($regexp,
+    return preg_replace_callback(SEC_EDIT_PATTERN,
                 'html_secedit_button', $text);
 }
 
@@ -112,11 +114,16 @@ function html_secedit($text,$show=true){
  * @triggers HTML_SECEDIT_BUTTON
  */
 function html_secedit_button($matches){
-    $data = array('secid'  => $matches[1],
-                  'target' => strtolower($matches[2]),
-                  'range'  => $matches[count($matches) - 1]);
-    if (count($matches) === 5) {
-        $data['name'] = $matches[3];
+    $data = array('secid'  => $matches['secid'],
+        'target' => strtolower($matches['target']),
+        'range'  => $matches['range']);
+
+    if (!empty($matches['hid'])) {
+        $data['hid'] = strtolower($matches['hid']);
+    }
+
+    if (!empty($matches['name'])) {
+        $data['name'] = $matches['name'];
     }
 
     return trigger_event('HTML_SECEDIT_BUTTON', $data,
@@ -163,7 +170,7 @@ function html_secedit_get_button($data) {
 function html_topbtn(){
     global $lang;
 
-    $ret  = '<a class="nolink" href="#dokuwiki__top"><input type="button" class="button" value="'.$lang['btn_top'].'" onclick="window.scrollTo(0, 0)" title="'.$lang['btn_top'].'" /></a>';
+    $ret  = '<a class="nolink" href="#dokuwiki__top"><button class="button" onclick="window.scrollTo(0, 0)" title="'.$lang['btn_top'].'">'.$lang['btn_top'].'</button></a>';
 
     return $ret;
 }
@@ -208,17 +215,16 @@ function html_btn($name, $id, $akey, $params, $method='get', $tooltip='', $label
     $ret .= '<form class="button btn_'.$name.'" method="'.$method.'" action="'.$script.'"><div class="no">';
 
     if(is_array($params)){
-        reset($params);
-        while (list($key, $val) = each($params)) {
+        foreach($params as $key => $val) {
             $ret .= '<input type="hidden" name="'.$key.'" ';
-            $ret .= 'value="'.htmlspecialchars($val).'" />';
+            $ret .= 'value="'.hsc($val).'" />';
         }
     }
 
     if ($tooltip!='') {
-        $tip = htmlspecialchars($tooltip);
+        $tip = hsc($tooltip);
     }else{
-        $tip = htmlspecialchars($label);
+        $tip = hsc($label);
     }
 
     $ret .= '<button type="submit" ';
@@ -369,15 +375,6 @@ function html_search(){
         $intro
     );
     echo $intro;
-    flush();
-
-    //show progressbar
-    print '<div id="dw__loading">'.NL;
-    print '<script type="text/javascript">/*<![CDATA[*/'.NL;
-    print 'showLoadBar();'.NL;
-    print '/*!]]>*/</script>'.NL;
-    print '</div>'.NL;
-    flush();
 
     //do quick pagesearch
     $data = ft_pageLookup($QUERY,true,useHeading('navigation'));
@@ -405,9 +402,9 @@ function html_search(){
         print '<div class="clearer"></div>';
         print '</div>';
     }
-    flush();
 
     //do fulltext search
+    $regex = array();
     $data = ft_pageSearch($QUERY,$regex);
     if(count($data)){
         print '<dl class="search_results">';
@@ -425,18 +422,11 @@ function html_search(){
                 }
                 $num++;
             }
-            flush();
         }
         print '</dl>';
     }else{
         print '<div class="nothing">'.$lang['nothingfound'].'</div>';
     }
-
-    //hide progressbar
-    print '<script type="text/javascript">/*<![CDATA[*/'.NL;
-    print 'hideLoadBar("dw__loading");'.NL;
-    print '/*!]]>*/</script>'.NL;
-    flush();
 }
 
 /**
@@ -582,7 +572,7 @@ function html_revisions($first=0, $media_id = false){
         if($summary) {
             $form->addElement(form_makeOpenTag('span', array('class' => 'sum')));
             if(!$media_id) $form->addElement(' – ');
-            $form->addElement('<bdi>' . htmlspecialchars($summary) . '</bdi>');
+            $form->addElement('<bdi>' . hsc($summary) . '</bdi>');
             $form->addElement(form_makeCloseTag('span'));
         }
 
@@ -665,7 +655,7 @@ function html_revisions($first=0, $media_id = false){
         if ($info['sum']) {
             $form->addElement(form_makeOpenTag('span', array('class' => 'sum')));
             if(!$media_id) $form->addElement(' – ');
-            $form->addElement('<bdi>'.htmlspecialchars($info['sum']).'</bdi>');
+            $form->addElement('<bdi>'.hsc($info['sum']).'</bdi>');
             $form->addElement(form_makeCloseTag('span'));
         }
 
@@ -876,7 +866,7 @@ function html_recent($first = 0, $show_changes = 'both') {
             $form->addElement(html_wikilink(':' . $recent['id'], useHeading('navigation') ? null : $recent['id']));
         }
         $form->addElement(form_makeOpenTag('span', array('class' => 'sum')));
-        $form->addElement(' – ' . htmlspecialchars($recent['sum']));
+        $form->addElement(' – ' . hsc($recent['sum']));
         $form->addElement(form_makeCloseTag('span'));
 
         $form->addElement(form_makeOpenTag('span', array('class' => 'user')));
@@ -1062,7 +1052,8 @@ function html_buildlist($data,$class,$func,$lifunc='html_li_default',$forcewrapp
         return '';
     }
 
-    $start_level = $data[0]['level'];
+    $firstElement = reset($data);
+    $start_level = $firstElement['level'];
     $level = $start_level;
     $ret   = '';
     $open  = 0;
@@ -1866,6 +1857,9 @@ function html_edit(){
     }
 
     $form->addHidden('target', $data['target']);
+    if ($INPUT->has('hid')) {
+        $form->addHidden('hid', $INPUT->str('hid'));
+    }
     $form->addElement(form_makeOpenTag('div', array('id'=>'wiki__editbar', 'class'=>'editBar')));
     $form->addElement(form_makeOpenTag('div', array('id'=>'size__ctl')));
     $form->addElement(form_makeCloseTag('div'));

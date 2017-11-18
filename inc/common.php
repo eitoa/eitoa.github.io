@@ -730,7 +730,9 @@ function checkwordblock($text = '') {
                 $data['userinfo']['name'] = $INFO['userinfo']['name'];
                 $data['userinfo']['mail'] = $INFO['userinfo']['mail'];
             }
-            $callback = create_function('', 'return true;');
+            $callback = function () {
+                return true;
+            };
             return trigger_event('COMMON_WORDBLOCK_BLOCKED', $data, $callback, true);
         }
     }
@@ -1109,6 +1111,7 @@ function parsePageTemplate(&$data) {
         array(
              '@ID@',
              '@NS@',
+             '@CURNS@',
              '@FILE@',
              '@!FILE@',
              '@!FILE!@',
@@ -1124,6 +1127,7 @@ function parsePageTemplate(&$data) {
         array(
              $id,
              getNS($id),
+             curNS($id),
              $file,
              utf8_ucfirst($file),
              utf8_strtoupper($file),
@@ -1139,7 +1143,13 @@ function parsePageTemplate(&$data) {
     );
 
     // we need the callback to work around strftime's char limit
-    $tpl         = preg_replace_callback('/%./', create_function('$m', 'return strftime($m[0]);'), $tpl);
+    $tpl = preg_replace_callback(
+        '/%./',
+        function ($m) {
+            return strftime($m[0]);
+        },
+        $tpl
+    );
     $data['tpl'] = $tpl;
     return $tpl;
 }
@@ -1916,7 +1926,16 @@ function send_redirect($url) {
         header('Location: '.$url);
     }
 
-    if(defined('DOKU_UNITTEST')) return; // no exits during unit tests
+    // no exits during unit tests
+    if(defined('DOKU_UNITTEST')) {
+        // pass info about the redirect back to the test suite
+        $testRequest = TestRequest::getRunning();
+        if($testRequest !== null) {
+            $testRequest->addData('send_redirect', $url);
+        }
+        return;
+    }
+
     exit;
 }
 
